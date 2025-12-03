@@ -21,11 +21,12 @@ type Config struct {
 
 // JiraConfig holds Jira connection settings
 type JiraConfig struct {
-	BaseURL     string   `koanf:"base_url"`
-	Email       string   `koanf:"email"`
-	APIToken    string   `koanf:"api_token"`
-	ProjectKeys []string `koanf:"project_keys"` // Support multiple projects
-	ProjectKey  string   `koanf:"project_key"`  // Deprecated: kept for backward compatibility
+	BaseURL       string   `koanf:"base_url"`
+	Email         string   `koanf:"email"`
+	APIToken      string   `koanf:"api_token"`
+	ProjectKeys   []string `koanf:"project_keys"` // Support multiple projects
+	ProjectKey    string   `koanf:"project_key"`  // Deprecated: kept for backward compatibility
+	AdditionalJQL string   `koanf:"additional_jql"` // Optional additional JQL filters to append to queries
 }
 
 // SLARule defines a threshold for bug age based on priority and status

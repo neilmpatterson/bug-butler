@@ -117,8 +117,24 @@ bug-butler check
 | `api_token` | Jira API token (supports `${VAR}` interpolation) | Yes |
 | `project_keys` | Array of Jira project keys/names to monitor | Yes* |
 | `project_key` | Single project key (deprecated, use `project_keys`) | Yes* |
+| `additional_jql` | Optional additional JQL filters to append to all queries | No |
 
 \* Either `project_keys` (recommended) or `project_key` must be provided
+
+#### Additional JQL Filters
+
+You can add custom JQL filters that will be appended to all bug queries (both `check` and `stats` commands). This is useful for:
+- Filtering by custom fields (e.g., assigned team, Zendesk tickets)
+- Including/excluding specific labels
+- Filtering by reporter groups
+
+**Example:**
+```yaml
+jira:
+  additional_jql: 'AND ("Assigned Dev Team[Dropdown]" not in (Comms, Data) OR "Assigned Dev Team[Dropdown]" is EMPTY) AND ("Zendesk Ticket Count">=1 OR labels in (jira_escalated, ClientReported))'
+```
+
+**Note:** The JQL must start with `AND` and use proper JQL syntax. Custom field names with spaces should be quoted.
 
 ### SLA Rules
 

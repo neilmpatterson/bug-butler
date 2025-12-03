@@ -16,9 +16,10 @@ import (
 
 // Client wraps the Jira API client
 type Client struct {
-	client      *jira.Client
-	projectKeys []string
-	baseURL     string
+	client        *jira.Client
+	projectKeys   []string
+	baseURL       string
+	additionalJQL string
 }
 
 // NewClient creates a new Jira client with authentication
@@ -49,9 +50,10 @@ func NewClient(cfg config.JiraConfig) (*Client, error) {
 	slog.Debug("Successfully authenticated with Jira", "base_url", cfg.BaseURL, "email", cfg.Email)
 
 	return &Client{
-		client:      client,
-		projectKeys: cfg.ProjectKeys,
-		baseURL:     cfg.BaseURL,
+		client:        client,
+		projectKeys:   cfg.ProjectKeys,
+		baseURL:       cfg.BaseURL,
+		additionalJQL: cfg.AdditionalJQL,
 	}, nil
 }
 
@@ -67,7 +69,7 @@ func (c *Client) FetchBugs() ([]*domain.Bug, error) {
 	// Build JQL query to fetch unresolved bugs
 	var jql string
 	if len(c.projectKeys) == 1 {
-		jql = fmt.Sprintf("project = %s AND statusCategory != done AND type = Bug ORDER BY updated DESC", c.projectKeys[0])
+		jql = fmt.Sprintf("project = %s AND statusCategory != done AND type = Bug", c.projectKeys[0])
 	} else {
 		// Multiple projects - use "project in (...)" syntax
 		projects := ""
@@ -77,8 +79,15 @@ func (c *Client) FetchBugs() ([]*domain.Bug, error) {
 			}
 			projects += fmt.Sprintf("\"%s\"", key)
 		}
-		jql = fmt.Sprintf("project in (%s) AND statusCategory != done AND type = Bug ORDER BY updated DESC", projects)
+		jql = fmt.Sprintf("project in (%s) AND statusCategory != done AND type = Bug", projects)
 	}
+
+	// Append additional JQL filters if configured
+	if c.additionalJQL != "" {
+		jql += " " + c.additionalJQL
+	}
+
+	jql += " ORDER BY updated DESC"
 
 	slog.Debug("Fetching bugs from Jira", "jql", jql, "projects", c.projectKeys)
 
@@ -167,7 +176,7 @@ func (c *Client) FetchBugsByDateRange(startDate, endDate time.Time) ([]*domain.B
 	// Build JQL query to fetch ALL bugs in date range (no status filter)
 	var jql string
 	if len(c.projectKeys) == 1 {
-		jql = fmt.Sprintf("project = %s AND type = Bug AND created >= %s AND created < %s ORDER BY created DESC",
+		jql = fmt.Sprintf("project = %s AND type = Bug AND created >= %s AND created < %s",
 			c.projectKeys[0], start, end)
 	} else {
 		// Multiple projects - use "project in (...)" syntax
@@ -178,9 +187,16 @@ func (c *Client) FetchBugsByDateRange(startDate, endDate time.Time) ([]*domain.B
 			}
 			projects += fmt.Sprintf("\"%s\"", key)
 		}
-		jql = fmt.Sprintf("project in (%s) AND type = Bug AND created >= %s AND created < %s ORDER BY created DESC",
+		jql = fmt.Sprintf("project in (%s) AND type = Bug AND created >= %s AND created < %s",
 			projects, start, end)
 	}
+
+	// Append additional JQL filters if configured
+	if c.additionalJQL != "" {
+		jql += " " + c.additionalJQL
+	}
+
+	jql += " ORDER BY created DESC"
 
 	slog.Debug("Fetching bugs by date range", "jql", jql, "start", start, "end", end)
 

@@ -31,6 +31,11 @@ jira:
   # Alternatively, for a single project:
   # project_key: "MYPROJECT"
 
+  # Optional: Additional JQL filters to append to all queries
+  # This allows you to further filter bugs based on custom fields, labels, etc.
+  # Example: Filter by assigned team, Zendesk tickets, labels, or reporters
+  # additional_jql: 'AND ("Assigned Dev Team[Dropdown]" not in (Comms, Data, Mobile) OR "Assigned Dev Team[Dropdown]" is EMPTY) AND ("Zendesk Ticket Count">=1 OR labels in (jira_escalated, ClientReported) OR reporter in (membersOf("Support Security Group")))'
+
 # SLA rules define thresholds for bug age based on priority and status
 # Rules are evaluated in order (first-match wins)
 # Bugs that violate rules are grouped into buckets for display
