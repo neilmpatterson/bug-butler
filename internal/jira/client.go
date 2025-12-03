@@ -16,10 +16,12 @@ import (
 
 // Client wraps the Jira API client
 type Client struct {
-	client        *jira.Client
-	projectKeys   []string
-	baseURL       string
-	additionalJQL string
+	client         *jira.Client
+	projectKeys    []string
+	baseURL        string
+	additionalJQL  string
+	sprintFieldID  string
+	storyPointsFieldID string
 }
 
 // NewClient creates a new Jira client with authentication
@@ -50,10 +52,12 @@ func NewClient(cfg config.JiraConfig) (*Client, error) {
 	slog.Debug("Successfully authenticated with Jira", "base_url", cfg.BaseURL, "email", cfg.Email)
 
 	return &Client{
-		client:        client,
-		projectKeys:   cfg.ProjectKeys,
-		baseURL:       cfg.BaseURL,
-		additionalJQL: cfg.AdditionalJQL,
+		client:             client,
+		projectKeys:        cfg.ProjectKeys,
+		baseURL:            cfg.BaseURL,
+		additionalJQL:      cfg.AdditionalJQL,
+		sprintFieldID:      cfg.CustomFieldIDs.Sprint,
+		storyPointsFieldID: cfg.CustomFieldIDs.StoryPoints,
 	}, nil
 }
 
@@ -146,7 +150,7 @@ func (c *Client) FetchBugs() ([]*domain.Bug, error) {
 
 		// Convert Jira issues to domain bugs
 		for _, issue := range searchResp.Issues {
-			bug, err := MapIssueToBug(&issue, c.baseURL)
+			bug, err := MapIssueToBug(&issue, c.baseURL, c.sprintFieldID, c.storyPointsFieldID)
 			if err != nil {
 				slog.Warn("Failed to map issue to bug", "issue_key", issue.Key, "error", err)
 				continue
@@ -212,7 +216,7 @@ func (c *Client) FetchBugsByDateRange(startDate, endDate time.Time) ([]*domain.B
 		params := url.Values{}
 		params.Set("jql", jql)
 		params.Set("maxResults", strconv.Itoa(maxResults))
-		params.Set("fields", "priority,created,resolution,resolutiondate")
+		params.Set("fields", fmt.Sprintf("priority,created,resolution,resolutiondate,issuetype,%s,%s", c.sprintFieldID, c.storyPointsFieldID))
 
 		// Add nextPageToken if we have one (not the first page)
 		if nextPageToken != "" {
@@ -255,7 +259,7 @@ func (c *Client) FetchBugsByDateRange(startDate, endDate time.Time) ([]*domain.B
 
 		// Convert Jira issues to domain bugs
 		for _, issue := range searchResp.Issues {
-			bug, err := MapIssueToBug(&issue, c.baseURL)
+			bug, err := MapIssueToBug(&issue, c.baseURL, c.sprintFieldID, c.storyPointsFieldID)
 			if err != nil {
 				slog.Warn("Failed to map issue to bug", "issue_key", issue.Key, "error", err)
 				continue
@@ -274,6 +278,123 @@ func (c *Client) FetchBugsByDateRange(startDate, endDate time.Time) ([]*domain.B
 
 	slog.Debug("Successfully fetched bugs by date range", "count", len(allBugs))
 	return allBugs, nil
+}
+
+// FetchIssuesBySprints retrieves all done issues for the specified sprint IDs
+func (c *Client) FetchIssuesBySprints(sprintIDs []string) ([]*domain.Bug, error) {
+	if len(sprintIDs) == 0 {
+		return []*domain.Bug{}, nil
+	}
+
+	// Build JQL query to fetch done issues for specific sprints
+	// Sprint custom field is typically customfield_10020
+	sprintList := ""
+	for i, id := range sprintIDs {
+		if i > 0 {
+			sprintList += ", "
+		}
+		sprintList += id
+	}
+
+	var jql string
+	if len(c.projectKeys) == 1 {
+		jql = fmt.Sprintf("project = %s AND sprint in (%s) AND statusCategory = done",
+			c.projectKeys[0], sprintList)
+	} else {
+		// Multiple projects - use "project in (...)" syntax
+		projects := ""
+		for i, key := range c.projectKeys {
+			if i > 0 {
+				projects += ", "
+			}
+			projects += fmt.Sprintf("\"%s\"", key)
+		}
+		jql = fmt.Sprintf("project in (%s) AND sprint in (%s) AND statusCategory = done",
+			projects, sprintList)
+	}
+
+	// NOTE: We do NOT apply additional_jql here because sprint stats need ALL issues
+	// (bugs + other types), not just filtered bugs. The additional_jql is meant for
+	// bug-specific filtering and would incorrectly exclude Stories/Tasks/etc.
+
+	jql += " ORDER BY resolutiondate DESC"
+
+	slog.Debug("Fetching issues by sprints", "jql", jql, "sprint_count", len(sprintIDs))
+
+	var allIssues []*domain.Bug
+	maxResults := 100
+	var nextPageToken string
+	pageNumber := 0
+
+	for {
+		pageNumber++
+
+		// Build GET request URL with cursor-based pagination
+		params := url.Values{}
+		params.Set("jql", jql)
+		params.Set("maxResults", strconv.Itoa(maxResults))
+		params.Set("fields", fmt.Sprintf("issuetype,resolution,resolutiondate,%s,%s", c.sprintFieldID, c.storyPointsFieldID))
+
+		// Add nextPageToken if we have one (not the first page)
+		if nextPageToken != "" {
+			params.Set("nextPageToken", nextPageToken)
+		}
+
+		apiURL := "/rest/api/3/search/jql?" + params.Encode()
+
+		// Create GET request with cursor pagination
+		req, err := c.client.NewRequest("GET", apiURL, nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create search request: %w", err)
+		}
+
+		// Execute request and read response body
+		var searchResp searchResponse
+		resp, err := c.client.Do(req, &searchResp)
+		if err != nil {
+			// Try to read response body for more details
+			if resp != nil && resp.Body != nil {
+				bodyBytes, readErr := io.ReadAll(resp.Body)
+				resp.Body.Close()
+				if readErr == nil {
+					slog.Error("API request failed",
+						"status_code", resp.StatusCode,
+						"response_body", string(bodyBytes),
+						"request_url", req.URL.String(),
+					)
+					return nil, fmt.Errorf("failed to search for issues (status %d): %s", resp.StatusCode, string(bodyBytes))
+				}
+			}
+			return nil, fmt.Errorf("failed to search for issues: %w", err)
+		}
+		defer resp.Body.Close()
+
+		slog.Debug("Fetched page",
+			"page", pageNumber,
+			"count", len(searchResp.Issues),
+		)
+
+		// Convert Jira issues to domain bugs (reusing the same struct for all issue types)
+		for _, issue := range searchResp.Issues {
+			bug, err := MapIssueToBug(&issue, c.baseURL, c.sprintFieldID, c.storyPointsFieldID)
+			if err != nil {
+				slog.Warn("Failed to map issue", "issue_key", issue.Key, "error", err)
+				continue
+			}
+			allIssues = append(allIssues, bug)
+		}
+
+		// Check if there are more pages using nextPageToken
+		if searchResp.NextPageToken == "" {
+			break
+		}
+
+		// Update token for next iteration
+		nextPageToken = searchResp.NextPageToken
+	}
+
+	slog.Debug("Successfully fetched issues by sprints", "count", len(allIssues))
+	return allIssues, nil
 }
 
 // parseSearchResponse parses the JSON response from API v3

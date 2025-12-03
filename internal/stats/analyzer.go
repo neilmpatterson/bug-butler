@@ -1,7 +1,9 @@
 package stats
 
 import (
+	"log/slog"
 	"math"
+	"regexp"
 	"sort"
 	"time"
 
@@ -105,6 +107,7 @@ func (a *Analyzer) Analyze(bugs []*domain.Bug) (*domain.TrendStats, error) {
 		ReductionGoal:     a.reductionGoal,
 		GoalTarget:        goalTarget,
 		OnTrack:           onTrack,
+		SprintStats:       []domain.SprintStats{}, // Will be populated separately if enabled
 	}, nil
 }
 
@@ -173,4 +176,215 @@ func countResolvedInMonth(bugs []*domain.Bug, month time.Time) int {
 		}
 	}
 	return count
+}
+
+// SprintInfo holds sprint ID and name for filtering
+type SprintInfo struct {
+	ID   string
+	Name string
+}
+
+// ExtractSprintIDs extracts unique sprint IDs from bugs
+func ExtractSprintIDs(bugs []*domain.Bug) []string {
+	sprintMap := make(map[string]bool)
+
+	for _, bug := range bugs {
+		if bug.SprintID != "" {
+			sprintMap[bug.SprintID] = true
+		}
+	}
+
+	// Convert map to slice
+	sprintIDs := make([]string, 0, len(sprintMap))
+	for id := range sprintMap {
+		sprintIDs = append(sprintIDs, id)
+	}
+
+	return sprintIDs
+}
+
+// ExtractAndFilterSprints extracts sprint info and filters by name pattern
+// Returns only sprint IDs that match the filter criteria
+func ExtractAndFilterSprints(bugs []*domain.Bug, sprintNameBeginsWith string, sprintNamePattern string) []string {
+	// Extract unique sprints with their names
+	sprintMap := make(map[string]string) // ID -> Name
+
+	for _, bug := range bugs {
+		if bug.SprintID != "" {
+			sprintMap[bug.SprintID] = bug.SprintName
+		}
+	}
+
+	slog.Debug("Extracted sprints from bugs",
+		"total_sprint_count", len(sprintMap),
+	)
+
+	// Compile filter if provided
+	var nameFilter *regexp.Regexp
+	var err error
+
+	if sprintNamePattern != "" {
+		nameFilter, err = regexp.Compile(sprintNamePattern)
+		if err != nil {
+			slog.Warn("Invalid sprint name pattern, ignoring filter",
+				"pattern", sprintNamePattern,
+				"error", err,
+			)
+		} else {
+			slog.Debug("Filtering sprints by regex pattern", "pattern", sprintNamePattern)
+		}
+	} else if sprintNameBeginsWith != "" {
+		// Convert simple prefix to regex pattern
+		escapedPrefix := regexp.QuoteMeta(sprintNameBeginsWith)
+		pattern := "^" + escapedPrefix
+		nameFilter, err = regexp.Compile(pattern)
+		if err != nil {
+			slog.Warn("Failed to compile prefix filter",
+				"prefix", sprintNameBeginsWith,
+				"error", err,
+			)
+		} else {
+			slog.Debug("Filtering sprints by prefix", "prefix", sprintNameBeginsWith)
+		}
+	}
+
+	// Filter sprint IDs by name
+	filteredIDs := make([]string, 0)
+	excludedCount := 0
+
+	for sprintID, sprintName := range sprintMap {
+		// Apply name filter if configured
+		if nameFilter != nil {
+			if nameFilter.MatchString(sprintName) {
+				filteredIDs = append(filteredIDs, sprintID)
+			} else {
+				excludedCount++
+				slog.Debug("Excluding sprint due to name filter",
+					"sprint_id", sprintID,
+					"sprint_name", sprintName,
+				)
+			}
+		} else {
+			// No filter, include all
+			filteredIDs = append(filteredIDs, sprintID)
+		}
+	}
+
+	slog.Debug("Sprint filtering complete",
+		"total_sprints", len(sprintMap),
+		"filtered_sprints", len(filteredIDs),
+		"excluded_sprints", excludedCount,
+	)
+
+	return filteredIDs
+}
+
+// CalculateSprintStats analyzes all sprint issues and calculates statistics per sprint
+// Parameters:
+//   - sprintIssues: All issues from the sprints
+//   - sprintNameBeginsWith: Simple prefix filter (e.g., "TOOLS Sprint")
+//   - sprintNamePattern: Advanced regex pattern (overrides begins_with if set)
+func (a *Analyzer) CalculateSprintStats(sprintIssues []*domain.Bug, sprintNameBeginsWith string, sprintNamePattern string) []domain.SprintStats {
+	// Compile regex pattern
+	var nameFilter *regexp.Regexp
+	var err error
+
+	// Priority: Use pattern if provided, otherwise convert begins_with to pattern
+	if sprintNamePattern != "" {
+		nameFilter, err = regexp.Compile(sprintNamePattern)
+		if err != nil {
+			slog.Warn("Invalid sprint name pattern, ignoring filter",
+				"pattern", sprintNamePattern,
+				"error", err,
+			)
+			nameFilter = nil
+		} else {
+			slog.Debug("Filtering sprints by regex pattern", "pattern", sprintNamePattern)
+		}
+	} else if sprintNameBeginsWith != "" {
+		// Convert simple prefix to regex pattern
+		escapedPrefix := regexp.QuoteMeta(sprintNameBeginsWith)
+		pattern := "^" + escapedPrefix
+		nameFilter, err = regexp.Compile(pattern)
+		if err != nil {
+			slog.Warn("Failed to compile prefix filter",
+				"prefix", sprintNameBeginsWith,
+				"error", err,
+			)
+			nameFilter = nil
+		} else {
+			slog.Debug("Filtering sprints by prefix", "prefix", sprintNameBeginsWith)
+		}
+	}
+
+	// Group issues by sprint
+	sprintGroups := make(map[string][]*domain.Bug)
+	sprintNames := make(map[string]string)
+
+	for _, issue := range sprintIssues {
+		if issue.SprintID != "" {
+			// Apply name filter if configured
+			if nameFilter != nil && !nameFilter.MatchString(issue.SprintName) {
+				slog.Debug("Excluding sprint due to name filter",
+					"sprint_name", issue.SprintName,
+					"pattern", sprintNamePattern,
+				)
+				continue
+			}
+
+			sprintGroups[issue.SprintID] = append(sprintGroups[issue.SprintID], issue)
+			sprintNames[issue.SprintID] = issue.SprintName
+		}
+	}
+
+	// Calculate stats for each sprint
+	stats := make([]domain.SprintStats, 0, len(sprintGroups))
+
+	for sprintID, issues := range sprintGroups {
+		bugCount := 0
+		otherCount := 0
+		bugStoryPoints := 0.0
+		totalStoryPoints := 0.0
+
+		for _, issue := range issues {
+			if issue.IssueType == "Bug" {
+				bugCount++
+				bugStoryPoints += issue.StoryPoints
+			} else {
+				otherCount++
+			}
+			totalStoryPoints += issue.StoryPoints
+		}
+
+		totalCount := bugCount + otherCount
+		bugPercentage := 0.0
+		pointsPercentage := 0.0
+
+		if totalCount > 0 {
+			bugPercentage = (float64(bugCount) / float64(totalCount)) * 100
+		}
+
+		if totalStoryPoints > 0 {
+			pointsPercentage = (bugStoryPoints / totalStoryPoints) * 100
+		}
+
+		stats = append(stats, domain.SprintStats{
+			SprintID:         sprintID,
+			SprintName:       sprintNames[sprintID],
+			BugCount:         bugCount,
+			OtherCount:       otherCount,
+			TotalCount:       totalCount,
+			BugPercentage:    bugPercentage,
+			BugStoryPoints:   bugStoryPoints,
+			TotalStoryPoints: totalStoryPoints,
+			PointsPercentage: pointsPercentage,
+		})
+	}
+
+	// Sort by sprint name for consistent display
+	sort.Slice(stats, func(i, j int) bool {
+		return stats[i].SprintName < stats[j].SprintName
+	})
+
+	return stats
 }

@@ -36,6 +36,20 @@ jira:
   # Example: Filter by assigned team, Zendesk tickets, labels, or reporters
   # additional_jql: 'AND ("Assigned Dev Team[Dropdown]" not in (Comms, Data, Mobile) OR "Assigned Dev Team[Dropdown]" is EMPTY) AND ("Zendesk Ticket Count">=1 OR labels in (jira_escalated, ClientReported) OR reporter in (membersOf("Support Security Group")))'
 
+  # Custom field ID mappings (varies by Jira instance)
+  # These field IDs are needed for sprint statistics
+  # To find your field IDs:
+  #   1. Go to Jira → Settings → Issues → Custom fields
+  #   2. Click on the field name (e.g., "Sprint" or "Story Points")
+  #   3. The field ID will be in the URL (e.g., customfield_10005)
+  # Or use the debug-sprint-fields.sh script to discover them
+  custom_fields:
+    # Sprint field ID - defaults to customfield_10020 if not specified
+    sprint: "customfield_10005"
+
+    # Story Points field ID - defaults to customfield_10016 if not specified
+    story_points: "customfield_10002"
+
 # SLA rules define thresholds for bug age based on priority and status
 # Rules are evaluated in order (first-match wins)
 # Bugs that violate rules are grouped into buckets for display
@@ -98,6 +112,21 @@ stats:
   # Number of months to analyze for trend statistics
   # Default: 24 (last 2 years)
   months_to_analyze: 24
+
+  # Show sprint-level statistics (bugs per sprint, bug density, story points)
+  # Default: false
+  show_sprints: false
+
+  # Filter sprints by name prefix (e.g., only show "TOOLS Sprint 2025.Q4.4" sprints)
+  # This is a simple prefix match - sprint names must start with this string
+  # Leave empty to show all sprints
+  # Example: "TOOLS Sprint" will match "TOOLS Sprint 2025.Q4.4" but not "Other Sprint"
+  sprint_name_begins_with: ""
+
+  # Advanced: Filter sprints by regex pattern (overrides sprint_name_begins_with)
+  # Use this for complex filtering (e.g., "^(TOOLS|PLATFORM) Sprint 2025")
+  # Leave empty to use sprint_name_begins_with or show all sprints
+  sprint_name_pattern: ""
 
 # Configuration Notes:
 # - Priority values should match your Jira priority names exactly (case-sensitive)

@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/neilmpatterson/bug-butler/internal/config"
+	"github.com/neilmpatterson/bug-butler/internal/domain"
 	"github.com/neilmpatterson/bug-butler/internal/jira"
 	"github.com/neilmpatterson/bug-butler/internal/output"
 	"github.com/neilmpatterson/bug-butler/internal/stats"
@@ -110,8 +111,87 @@ func runStats(cmd *cobra.Command, args []string) error {
 
 	fmt.Println(" done")
 
+	// Calculate sprint statistics if enabled
+	if cfg.Stats.ShowSprints {
+		fmt.Print("\n🏃 Analyzing sprint statistics...")
+
+		// Extract and filter sprint IDs by name pattern (before fetching issues!)
+		var sprintIDs []string
+		if cfg.Stats.SprintNameBeginsWith != "" || cfg.Stats.SprintNamePattern != "" {
+			// Use filtered extraction when filtering is configured
+			sprintIDs = stats.ExtractAndFilterSprints(
+				bugs,
+				cfg.Stats.SprintNameBeginsWith,
+				cfg.Stats.SprintNamePattern,
+			)
+			fmt.Printf("\n  Filtered to %d sprints (from bugs data)\n", len(sprintIDs))
+		} else {
+			// No filtering - extract all sprints
+			sprintIDs = stats.ExtractSprintIDs(bugs)
+			fmt.Printf("\n  Found %d sprints with bugs\n", len(sprintIDs))
+		}
+
+		slog.Debug("Sprint extraction complete",
+			"sprint_count", len(sprintIDs),
+			"total_bugs", len(bugs),
+		)
+
+		if len(sprintIDs) > 0 {
+			slog.Debug("Sprint IDs", "ids", sprintIDs)
+			fmt.Print("  Fetching issues for filtered sprints...")
+
+			// Fetch all done issues for these sprints
+			sprintIssues, err := jiraClient.FetchIssuesBySprints(sprintIDs)
+			if err != nil {
+				slog.Warn("Failed to fetch sprint issues", "error", err)
+				fmt.Println(" failed (continuing without sprint stats)")
+			} else {
+				fmt.Printf(" found %d issues\n", len(sprintIssues))
+				slog.Debug("Sprint issues fetched",
+					"issue_count", len(sprintIssues),
+				)
+				fmt.Print("  Calculating sprint metrics...")
+
+				// Calculate sprint statistics (with optional name filtering)
+				trendStats.SprintStats = analyzer.CalculateSprintStats(
+					sprintIssues,
+					cfg.Stats.SprintNameBeginsWith,
+					cfg.Stats.SprintNamePattern,
+				)
+
+				slog.Debug("Sprint stats calculated",
+					"sprint_stats_count", len(trendStats.SprintStats),
+				)
+
+				fmt.Println(" done")
+			}
+		} else {
+			fmt.Println("\n  ⚠️  No sprints found in bug data")
+			fmt.Println("  This could mean:")
+			fmt.Println("    - Bugs don't have sprint assignments")
+			fmt.Println("    - Sprint custom field ID is incorrect (currently using customfield_10020)")
+			fmt.Println("  Run with --debug to see raw field data")
+
+			slog.Debug("No sprints extracted",
+				"bugs_checked", len(bugs),
+				"bugs_with_sprint_data", countBugsWithSprints(bugs),
+			)
+		}
+	}
+
 	// Display results
 	output.DisplayTrendStats(trendStats)
 
 	return nil
+}
+
+// countBugsWithSprints counts how many bugs have sprint data
+func countBugsWithSprints(bugs []*domain.Bug) int {
+	count := 0
+	for _, bug := range bugs {
+		if bug.SprintID != "" {
+			count++
+		}
+	}
+	return count
 }

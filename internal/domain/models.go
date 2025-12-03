@@ -8,10 +8,14 @@ type Bug struct {
 	Summary        string     // Issue title/summary
 	Priority       string     // Priority level (Critical, High, Medium, Low)
 	Status         string     // Current status (Backlog, Needs Triage, etc.)
+	IssueType      string     // Issue type (Bug, Story, Task, etc.)
 	Created        time.Time  // When the bug was created
 	Updated        time.Time  // When the bug was last updated
 	Resolution     string     // Resolution status (empty if unresolved)
 	ResolutionDate *time.Time // When the bug was resolved (nil if unresolved)
+	SprintID       string     // Sprint ID (empty if not in sprint)
+	SprintName     string     // Sprint name (empty if not in sprint)
+	StoryPoints    float64    // Story points assigned to this issue
 	BaseURL        string     // Jira base URL for building links
 }
 
@@ -131,4 +135,18 @@ type TrendStats struct {
 	ReductionGoal     float64           // Target reduction percentage
 	GoalTarget        int               // Calculated bug count target for current month
 	OnTrack           bool              // Whether current month is meeting the goal
+	SprintStats       []SprintStats     // Sprint-level statistics (if enabled)
+}
+
+// SprintStats represents bug and issue statistics for a single sprint
+type SprintStats struct {
+	SprintID          string  // Sprint ID from Jira
+	SprintName        string  // Sprint name
+	BugCount          int     // Number of bugs completed in this sprint
+	OtherCount        int     // Number of non-bug issues completed
+	TotalCount        int     // Total issues completed
+	BugPercentage     float64 // Percentage of bugs vs total issues
+	BugStoryPoints    float64 // Story points from bugs
+	TotalStoryPoints  float64 // Total story points in sprint
+	PointsPercentage  float64 // Percentage of bug points vs total points
 }

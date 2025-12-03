@@ -23,6 +23,7 @@ func DisplayTrendStats(stats *domain.TrendStats) {
 	displayMonthlyTable(stats.MonthlyData)
 	displayGoalProgress(stats)
 	displayPriorityBreakdown(stats.MonthlyData)
+	displaySprintStats(stats.SprintStats)
 }
 
 // displayHeader prints the report header
@@ -250,4 +251,89 @@ func generateSparkline(values []int) string {
 	}
 
 	return result.String()
+}
+
+// displaySprintStats shows sprint-level bug statistics
+func displaySprintStats(sprintStats []domain.SprintStats) {
+	if len(sprintStats) == 0 {
+		return
+	}
+
+	fmt.Println("\n🏃 Sprint Statistics")
+	fmt.Printf("\nShowing bug density across %d sprints\n", len(sprintStats))
+
+	t := table.NewWriter()
+	t.SetOutputMirror(os.Stdout)
+	t.SetStyle(table.StyleRounded)
+
+	// Set headers
+	t.AppendHeader(table.Row{
+		"Sprint",
+		"Bugs",
+		"Other",
+		"Total",
+		"Bug %",
+		"Bug Pts",
+		"Total Pts",
+		"Pts %",
+	})
+
+	// Add rows for each sprint
+	for _, sprint := range sprintStats {
+		// Format percentages
+		bugPercent := fmt.Sprintf("%.1f%%", sprint.BugPercentage)
+		pointsPercent := fmt.Sprintf("%.1f%%", sprint.PointsPercentage)
+
+		// Color code bug percentage (higher is worse)
+		var bugPercentColor text.Colors
+		if sprint.BugPercentage > 50 {
+			bugPercentColor = text.Colors{text.FgRed, text.Bold}
+		} else if sprint.BugPercentage > 30 {
+			bugPercentColor = text.Colors{text.FgYellow}
+		} else {
+			bugPercentColor = text.Colors{text.FgGreen}
+		}
+
+		t.AppendRow(table.Row{
+			sprint.SprintName,
+			sprint.BugCount,
+			sprint.OtherCount,
+			sprint.TotalCount,
+			text.Colors.Sprint(bugPercentColor, bugPercent),
+			fmt.Sprintf("%.1f", sprint.BugStoryPoints),
+			fmt.Sprintf("%.1f", sprint.TotalStoryPoints),
+			pointsPercent,
+		})
+	}
+
+	t.Render()
+
+	// Display summary statistics
+	if len(sprintStats) > 0 {
+		var totalBugs, totalOther int
+		var totalBugPoints, totalAllPoints float64
+
+		for _, s := range sprintStats {
+			totalBugs += s.BugCount
+			totalOther += s.OtherCount
+			totalBugPoints += s.BugStoryPoints
+			totalAllPoints += s.TotalStoryPoints
+		}
+
+		totalIssues := totalBugs + totalOther
+		avgBugPercent := 0.0
+		avgPointsPercent := 0.0
+
+		if totalIssues > 0 {
+			avgBugPercent = (float64(totalBugs) / float64(totalIssues)) * 100
+		}
+		if totalAllPoints > 0 {
+			avgPointsPercent = (totalBugPoints / totalAllPoints) * 100
+		}
+
+		fmt.Printf("\nSummary:\n")
+		fmt.Printf("  Total issues: %d (%d bugs, %d other)\n", totalIssues, totalBugs, totalOther)
+		fmt.Printf("  Average bug density: %.1f%% of issues\n", avgBugPercent)
+		fmt.Printf("  Average bug points: %.1f%% of story points\n", avgPointsPercent)
+	}
 }

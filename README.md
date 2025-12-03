@@ -13,10 +13,11 @@ Bug Butler helps you stay on top of your bug backlog by:
 - **SLA Monitoring**: Define flexible rules based on bug priority, status, and age
 - **Bucket Categorization**: Automatically group bugs by severity for easy triage
 - **Trend Statistics**: Track bug creation and resolution trends over 24 months with sparkline visualizations
+- **Sprint Statistics**: Analyze bug density per sprint with story points breakdown and filtering
 - **Goal Tracking**: Monitor progress toward bug reduction goals (compared to same month last year)
 - **Color-Coded Output**: Visual priority indicators using terminal colors
 - **Environment Variables**: Secure API token management via environment variables
-- **Configurable**: YAML-based configuration for easy customization
+- **Configurable**: YAML-based configuration for easy customization (including custom field IDs)
 - **Zero Dependencies**: Single binary with no external runtime dependencies
 
 ## Installation
@@ -136,6 +137,35 @@ jira:
 
 **Note:** The JQL must start with `AND` and use proper JQL syntax. Custom field names with spaces should be quoted.
 
+#### Custom Field Configuration
+
+For sprint statistics to work, you need to configure the custom field IDs for your Jira instance. These vary between Jira instances:
+
+```yaml
+jira:
+  custom_fields:
+    sprint: "customfield_10005"       # Sprint field ID
+    story_points: "customfield_10002" # Story Points field ID
+```
+
+**Finding Your Custom Field IDs:**
+
+1. **Via Jira Settings:**
+   - Go to Jira → Settings → Issues → Custom fields
+   - Click on "Sprint" or "Story Points"
+   - The field ID will be in the URL (e.g., `customfield_10005`)
+
+2. **Using the diagnostic script:**
+   ```bash
+   ./debug-sprint-fields.sh
+   ```
+
+**Default Values:**
+
+If not specified, the tool uses common Jira Cloud defaults:
+- Sprint: `customfield_10020`
+- Story Points: `customfield_10016`
+
 ### SLA Rules
 
 SLA rules are evaluated in order (first-match wins). Each rule defines:
@@ -228,8 +258,29 @@ The `stats` command displays:
 - **Monthly Statistics**: Created, resolved, and unresolved bug counts per month
 - **Goal Tracking**: Progress toward monthly reduction goals (compared to same month last year)
 - **Priority Breakdown**: Distribution of bugs by priority level over time
+- **Sprint Statistics** (optional): Bug density metrics per sprint including bug counts, percentages, and story points
 
 This helps track whether your team is making progress on reducing the overall bug backlog.
+
+#### Sprint Statistics
+
+Enable sprint-level statistics to see bug density across sprints:
+
+```yaml
+stats:
+  show_sprints: true
+
+  # Optional: Filter to specific sprints by name prefix
+  sprint_name_begins_with: "TOOLS Sprint"
+```
+
+Sprint statistics show:
+- Bug count vs other issue types per sprint
+- Bug percentage (color-coded: green <30%, yellow 30-50%, red >50%)
+- Story points breakdown (bug points vs total points)
+- Summary statistics across all sprints
+
+**Note**: Sprint statistics require custom field configuration. See Configuration Guide below.
 
 ### View Version
 

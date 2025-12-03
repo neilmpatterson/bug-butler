@@ -21,12 +21,19 @@ type Config struct {
 
 // JiraConfig holds Jira connection settings
 type JiraConfig struct {
-	BaseURL       string   `koanf:"base_url"`
-	Email         string   `koanf:"email"`
-	APIToken      string   `koanf:"api_token"`
-	ProjectKeys   []string `koanf:"project_keys"` // Support multiple projects
-	ProjectKey    string   `koanf:"project_key"`  // Deprecated: kept for backward compatibility
-	AdditionalJQL string   `koanf:"additional_jql"` // Optional additional JQL filters to append to queries
+	BaseURL         string       `koanf:"base_url"`
+	Email           string       `koanf:"email"`
+	APIToken        string       `koanf:"api_token"`
+	ProjectKeys     []string     `koanf:"project_keys"` // Support multiple projects
+	ProjectKey      string       `koanf:"project_key"`  // Deprecated: kept for backward compatibility
+	AdditionalJQL   string       `koanf:"additional_jql"` // Optional additional JQL filters to append to queries
+	CustomFieldIDs  CustomFields `koanf:"custom_fields"`  // Custom field ID mappings for this Jira instance
+}
+
+// CustomFields holds custom field ID mappings that vary by Jira instance
+type CustomFields struct {
+	Sprint      string `koanf:"sprint"`       // Sprint field ID (e.g., "customfield_10005")
+	StoryPoints string `koanf:"story_points"` // Story Points field ID (e.g., "customfield_10002")
 }
 
 // SLARule defines a threshold for bug age based on priority and status
@@ -41,8 +48,11 @@ type SLARule struct {
 
 // StatsConfig holds configuration for bug trend statistics
 type StatsConfig struct {
-	ReductionGoalPercent float64 `koanf:"reduction_goal_percent"`
-	MonthsToAnalyze      int     `koanf:"months_to_analyze"`
+	ReductionGoalPercent   float64 `koanf:"reduction_goal_percent"`
+	MonthsToAnalyze        int     `koanf:"months_to_analyze"`
+	ShowSprints            bool    `koanf:"show_sprints"`
+	SprintNameBeginsWith   string  `koanf:"sprint_name_begins_with"` // Simple prefix filter (e.g., "TOOLS Sprint")
+	SprintNamePattern      string  `koanf:"sprint_name_pattern"`     // Advanced regex pattern (overrides begins_with)
 }
 
 // Load reads configuration from a YAML file and environment variables
@@ -130,6 +140,14 @@ func (c *Config) Validate() error {
 	// If old project_key is used, migrate it to project_keys
 	if c.Jira.ProjectKey != "" && len(c.Jira.ProjectKeys) == 0 {
 		c.Jira.ProjectKeys = []string{c.Jira.ProjectKey}
+	}
+
+	// Set default custom field IDs if not provided
+	if c.Jira.CustomFieldIDs.Sprint == "" {
+		c.Jira.CustomFieldIDs.Sprint = "customfield_10020" // Common Jira Cloud default
+	}
+	if c.Jira.CustomFieldIDs.StoryPoints == "" {
+		c.Jira.CustomFieldIDs.StoryPoints = "customfield_10016" // Common Jira Cloud default
 	}
 
 	// Validate SLA rules
