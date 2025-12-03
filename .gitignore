@@ -1,6 +1,5 @@
 # Binaries
 /bin/
-bug-butler
 
 # Go build artifacts
 *.exe
