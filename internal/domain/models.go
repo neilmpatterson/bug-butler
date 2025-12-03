@@ -4,13 +4,15 @@ import "time"
 
 // Bug represents a Jira issue with relevant fields for SLA monitoring
 type Bug struct {
-	Key      string    // Jira issue key (e.g., "PROJ-123")
-	Summary  string    // Issue title/summary
-	Priority string    // Priority level (Critical, High, Medium, Low)
-	Status   string    // Current status (Backlog, Needs Triage, etc.)
-	Created  time.Time // When the bug was created
-	Updated  time.Time // When the bug was last updated
-	BaseURL  string    // Jira base URL for building links
+	Key            string     // Jira issue key (e.g., "PROJ-123")
+	Summary        string     // Issue title/summary
+	Priority       string     // Priority level (Critical, High, Medium, Low)
+	Status         string     // Current status (Backlog, Needs Triage, etc.)
+	Created        time.Time  // When the bug was created
+	Updated        time.Time  // When the bug was last updated
+	Resolution     string     // Resolution status (empty if unresolved)
+	ResolutionDate *time.Time // When the bug was resolved (nil if unresolved)
+	BaseURL        string     // Jira base URL for building links
 }
 
 // URL returns the full URL to the bug in Jira
@@ -108,4 +110,25 @@ func (bg *BucketGroup) Sort() {
 			}
 		}
 	}
+}
+
+// MonthlyBugStats represents bug metrics for a single month
+type MonthlyBugStats struct {
+	Month           time.Time      // First day of the month
+	TotalCreated    int            // Total bugs created in this month
+	TotalResolved   int            // Total bugs resolved in this month
+	TotalUnresolved int            // Total unresolved bugs at end of this month (backlog size)
+	NetChange       int            // Created - Resolved
+	ChangePercent   float64        // % change in created from previous month
+	ByPriority      map[string]int // Created count by priority level
+}
+
+// TrendStats represents complete trend analysis over a time period
+type TrendStats struct {
+	MonthlyData       []MonthlyBugStats // Monthly statistics ordered chronologically
+	CurrentMonth      *MonthlyBugStats  // In-progress month (partial data)
+	LastYearSameMonth *MonthlyBugStats  // Same month from last year (for goal comparison)
+	ReductionGoal     float64           // Target reduction percentage
+	GoalTarget        int               // Calculated bug count target for current month
+	OnTrack           bool              // Whether current month is meeting the goal
 }

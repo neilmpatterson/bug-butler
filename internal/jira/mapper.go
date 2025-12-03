@@ -30,13 +30,28 @@ func MapIssueToBug(issue *jira.Issue, baseURL string) (*domain.Bug, error) {
 	created := time.Time(issue.Fields.Created)
 	updated := time.Time(issue.Fields.Updated)
 
+	// Extract resolution (may be nil if unresolved)
+	resolution := ""
+	if issue.Fields.Resolution != nil {
+		resolution = issue.Fields.Resolution.Name
+	}
+
+	// Extract resolution date (may be zero if unresolved)
+	var resolutionDate *time.Time
+	if !time.Time(issue.Fields.Resolutiondate).IsZero() {
+		t := time.Time(issue.Fields.Resolutiondate)
+		resolutionDate = &t
+	}
+
 	return &domain.Bug{
-		Key:      issue.Key,
-		Summary:  issue.Fields.Summary,
-		Priority: priority,
-		Status:   status,
-		Created:  created,
-		Updated:  updated,
-		BaseURL:  baseURL,
+		Key:            issue.Key,
+		Summary:        issue.Fields.Summary,
+		Priority:       priority,
+		Status:         status,
+		Created:        created,
+		Updated:        updated,
+		Resolution:     resolution,
+		ResolutionDate: resolutionDate,
+		BaseURL:        baseURL,
 	}, nil
 }

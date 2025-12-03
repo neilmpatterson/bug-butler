@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/url"
 	"strconv"
+	"time"
 
 	"github.com/andygrunwald/go-jira"
 	"github.com/neilmpatterson/bug-butler/internal/config"
@@ -154,6 +155,108 @@ func (c *Client) FetchBugs() ([]*domain.Bug, error) {
 	}
 
 	slog.Debug("Successfully fetched bugs", "count", len(allBugs))
+	return allBugs, nil
+}
+
+// FetchBugsByDateRange retrieves all bugs created within a date range (including resolved bugs)
+func (c *Client) FetchBugsByDateRange(startDate, endDate time.Time) ([]*domain.Bug, error) {
+	// Format dates for JQL: YYYY-MM-DD
+	start := startDate.Format("2006-01-02")
+	end := endDate.Format("2006-01-02")
+
+	// Build JQL query to fetch ALL bugs in date range (no status filter)
+	var jql string
+	if len(c.projectKeys) == 1 {
+		jql = fmt.Sprintf("project = %s AND type = Bug AND created >= %s AND created < %s ORDER BY created DESC",
+			c.projectKeys[0], start, end)
+	} else {
+		// Multiple projects - use "project in (...)" syntax
+		projects := ""
+		for i, key := range c.projectKeys {
+			if i > 0 {
+				projects += ", "
+			}
+			projects += fmt.Sprintf("\"%s\"", key)
+		}
+		jql = fmt.Sprintf("project in (%s) AND type = Bug AND created >= %s AND created < %s ORDER BY created DESC",
+			projects, start, end)
+	}
+
+	slog.Debug("Fetching bugs by date range", "jql", jql, "start", start, "end", end)
+
+	var allBugs []*domain.Bug
+	maxResults := 100
+	var nextPageToken string
+	pageNumber := 0
+
+	for {
+		pageNumber++
+
+		// Build GET request URL with cursor-based pagination
+		params := url.Values{}
+		params.Set("jql", jql)
+		params.Set("maxResults", strconv.Itoa(maxResults))
+		params.Set("fields", "priority,created,resolution,resolutiondate")
+
+		// Add nextPageToken if we have one (not the first page)
+		if nextPageToken != "" {
+			params.Set("nextPageToken", nextPageToken)
+		}
+
+		apiURL := "/rest/api/3/search/jql?" + params.Encode()
+
+		// Create GET request with cursor pagination
+		req, err := c.client.NewRequest("GET", apiURL, nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create search request: %w", err)
+		}
+
+		// Execute request and read response body
+		var searchResp searchResponse
+		resp, err := c.client.Do(req, &searchResp)
+		if err != nil {
+			// Try to read response body for more details
+			if resp != nil && resp.Body != nil {
+				bodyBytes, readErr := io.ReadAll(resp.Body)
+				resp.Body.Close()
+				if readErr == nil {
+					slog.Error("API request failed",
+						"status_code", resp.StatusCode,
+						"response_body", string(bodyBytes),
+						"request_url", req.URL.String(),
+					)
+					return nil, fmt.Errorf("failed to search for issues (status %d): %s", resp.StatusCode, string(bodyBytes))
+				}
+			}
+			return nil, fmt.Errorf("failed to search for issues: %w", err)
+		}
+		defer resp.Body.Close()
+
+		slog.Debug("Fetched page",
+			"page", pageNumber,
+			"count", len(searchResp.Issues),
+		)
+
+		// Convert Jira issues to domain bugs
+		for _, issue := range searchResp.Issues {
+			bug, err := MapIssueToBug(&issue, c.baseURL)
+			if err != nil {
+				slog.Warn("Failed to map issue to bug", "issue_key", issue.Key, "error", err)
+				continue
+			}
+			allBugs = append(allBugs, bug)
+		}
+
+		// Check if there are more pages using nextPageToken
+		if searchResp.NextPageToken == "" {
+			break
+		}
+
+		// Update token for next iteration
+		nextPageToken = searchResp.NextPageToken
+	}
+
+	slog.Debug("Successfully fetched bugs by date range", "count", len(allBugs))
 	return allBugs, nil
 }
 

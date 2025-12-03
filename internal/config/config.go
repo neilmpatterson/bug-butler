@@ -14,8 +14,9 @@ import (
 
 // Config represents the complete application configuration
 type Config struct {
-	Jira     JiraConfig `koanf:"jira"`
-	SLARules []SLARule  `koanf:"sla_rules"`
+	Jira     JiraConfig  `koanf:"jira"`
+	SLARules []SLARule   `koanf:"sla_rules"`
+	Stats    StatsConfig `koanf:"stats"`
 }
 
 // JiraConfig holds Jira connection settings
@@ -35,6 +36,12 @@ type SLARule struct {
 	MaxAgeDays float64  `koanf:"max_age_days"`
 	Bucket     string   `koanf:"bucket"`
 	Severity   int      `koanf:"severity"`
+}
+
+// StatsConfig holds configuration for bug trend statistics
+type StatsConfig struct {
+	ReductionGoalPercent float64 `koanf:"reduction_goal_percent"`
+	MonthsToAnalyze      int     `koanf:"months_to_analyze"`
 }
 
 // Load reads configuration from a YAML file and environment variables
@@ -64,12 +71,25 @@ func Load(configPath string) (*Config, error) {
 		return nil, fmt.Errorf("failed to interpolate environment variables: %w", err)
 	}
 
+	// Set defaults for stats config if not provided
+	cfg.setStatsDefaults()
+
 	// Validate configuration
 	if err := cfg.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid configuration: %w", err)
 	}
 
 	return &cfg, nil
+}
+
+// setStatsDefaults sets default values for stats configuration if not provided
+func (c *Config) setStatsDefaults() {
+	if c.Stats.ReductionGoalPercent == 0 {
+		c.Stats.ReductionGoalPercent = 10.0
+	}
+	if c.Stats.MonthsToAnalyze == 0 {
+		c.Stats.MonthsToAnalyze = 24
+	}
 }
 
 // interpolateEnvVars replaces ${VAR} patterns with environment variable values

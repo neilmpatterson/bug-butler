@@ -83,6 +83,17 @@ sla_rules:
     bucket: "⚪ REVIEW NEEDED"
     severity: 3
 
+# Statistics configuration for bug trend analysis
+# Used by the 'bug-butler stats' command
+stats:
+  # Target reduction percentage for monthly bug creation goal
+  # Default: 10.0 (aim for 10% fewer bugs than same month last year)
+  reduction_goal_percent: 10.0
+
+  # Number of months to analyze for trend statistics
+  # Default: 24 (last 2 years)
+  months_to_analyze: 24
+
 # Configuration Notes:
 # - Priority values should match your Jira priority names exactly (case-sensitive)
 # - Status can be a single string or array of strings (OR logic)

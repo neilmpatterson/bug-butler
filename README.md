@@ -12,6 +12,8 @@ Bug Butler helps you stay on top of your bug backlog by:
 
 - **SLA Monitoring**: Define flexible rules based on bug priority, status, and age
 - **Bucket Categorization**: Automatically group bugs by severity for easy triage
+- **Trend Statistics**: Track bug creation and resolution trends over 24 months with sparkline visualizations
+- **Goal Tracking**: Monitor progress toward bug reduction goals (compared to same month last year)
 - **Color-Coded Output**: Visual priority indicators using terminal colors
 - **Environment Variables**: Secure API token management via environment variables
 - **Configurable**: YAML-based configuration for easy customization
@@ -187,7 +189,31 @@ bug-butler check --config /path/to/config.yaml
 
 # Use short flag
 bug-butler check -c my-config.yaml
+
+# Enable debug logging
+bug-butler check --debug
 ```
+
+### View Bug Trend Statistics
+
+```bash
+# Show bug trends over last 24 months
+bug-butler stats
+
+# Use custom config file
+bug-butler stats --config /path/to/config.yaml
+
+# Enable debug logging
+bug-butler stats --debug
+```
+
+The `stats` command displays:
+- **Unresolved Bug Backlog**: Sparkline showing total unresolved bugs over time
+- **Monthly Statistics**: Created, resolved, and unresolved bug counts per month
+- **Goal Tracking**: Progress toward monthly reduction goals (compared to same month last year)
+- **Priority Breakdown**: Distribution of bugs by priority level over time
+
+This helps track whether your team is making progress on reducing the overall bug backlog.
 
 ### View Version
 
