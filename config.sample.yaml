@@ -1,0 +1,92 @@
+# Bug Butler Configuration File
+#
+# This file defines how to connect to Jira and what SLA rules to apply
+# for monitoring bugs.
+#
+# SETUP INSTRUCTIONS:
+# 1. Copy this file to config.yaml: cp config.sample.yaml config.yaml
+# 2. Update the jira section with your Jira instance details
+# 3. Set JIRA_API_TOKEN environment variable with your API token
+# 4. Customize SLA rules to match your team's requirements
+
+# Jira connection settings
+jira:
+  # Your Jira Cloud base URL
+  base_url: "https://yourcompany.atlassian.net"
+
+  # Your Jira email address
+  email: "your-email@company.com"
+
+  # Jira API token - uses environment variable interpolation
+  # Generate token at: https://id.atlassian.com/manage-profile/security/api-tokens
+  # Set in your shell: export JIRA_API_TOKEN="your-token-here"
+  api_token: "${JIRA_API_TOKEN}"
+
+  # Jira project keys to monitor (supports multiple projects)
+  # Use array format for multiple projects
+  project_keys:
+    - "PROJ1"
+    - "PROJ2"
+
+  # Alternatively, for a single project:
+  # project_key: "MYPROJECT"
+
+# SLA rules define thresholds for bug age based on priority and status
+# Rules are evaluated in order (first-match wins)
+# Bugs that violate rules are grouped into buckets for display
+sla_rules:
+  # Critical bugs need immediate triage (within 6 hours)
+  - name: "Critical bugs need immediate triage"
+    priority: "Critical"
+    status: ["Needs Triage", "To Do"]
+    max_age_days: 0.25  # 6 hours
+    bucket: "🔴 URGENT"
+    severity: 1
+
+  # Critical bugs shouldn't sit in backlog (within 6 hours)
+  - name: "Critical bugs stuck in backlog"
+    priority: "Critical"
+    status: ["Backlog", "Bug Fix Needed"]
+    max_age_days: 0.25
+    bucket: "🔴 URGENT"
+    severity: 1
+
+  # High priority bugs need timely triage (within 1 day)
+  - name: "High priority needs triage"
+    priority: "High"
+    status: ["Needs Triage"]
+    max_age_days: 1
+    bucket: "🟡 ATTENTION NEEDED"
+    severity: 2
+
+  # High priority bugs shouldn't age in backlog (within 3 days)
+  - name: "High priority backlog aging"
+    priority: "High"
+    status: ["Backlog", "Bug Fix Needed", "On Hold", "To Do"]
+    max_age_days: 3
+    bucket: "🟡 ATTENTION NEEDED"
+    severity: 2
+
+  # Medium priority bugs need review within 3 weeks
+  - name: "Medium priority stale"
+    priority: "Medium"
+    status: ["Backlog", "Needs Triage", "To Do", "Bug Fix Needed", "On Hold"]
+    max_age_days: 21
+    bucket: "⚪ REVIEW NEEDED"
+    severity: 3
+
+  # Low priority bugs that have been sitting too long (30 days)
+  - name: "Low priority very stale"
+    priority: "Low"
+    status: ["Backlog", "Needs Triage", "To Do", "Bug Fix Needed", "On Hold"]
+    max_age_days: 30
+    bucket: "⚪ REVIEW NEEDED"
+    severity: 3
+
+# Configuration Notes:
+# - Priority values should match your Jira priority names exactly (case-sensitive)
+# - Status can be a single string or array of strings (OR logic)
+# - Status values are case-sensitive and must match your Jira instance
+# - max_age_days supports decimals (e.g., 0.25 = 6 hours, 0.5 = 12 hours)
+# - Buckets group violations; same bucket name = same display table
+# - Severity determines bucket display order (1 = highest priority)
