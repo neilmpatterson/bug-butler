@@ -128,6 +128,13 @@ stats:
   # Leave empty to use sprint_name_begins_with or show all sprints
   sprint_name_pattern: ""
 
+  # Sprint board filter: Apply your Jira board's filter to match Sprint Report results
+  # This ensures sprint statistics match what you see in Jira's Sprint Report
+  # Copy the JQL filter from: Board Settings → Filter
+  # Example: '"Assigned Dev Team[Dropdown]" = "Composer US-EU" OR project = CMS AND component = "Calendars (new)"'
+  # Leave empty to include all done issues in sprints (not recommended if you want to match board reports)
+  sprint_board_filter: ""
+
 # Configuration Notes:
 # - Priority values should match your Jira priority names exactly (case-sensitive)
 # - Status can be a single string or array of strings (OR logic)

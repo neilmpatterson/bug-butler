@@ -140,6 +140,12 @@ func runStats(cmd *cobra.Command, args []string) error {
 			slog.Debug("Sprint IDs", "ids", sprintIDs)
 			fmt.Print("  Fetching issues for filtered sprints...")
 
+			// Apply sprint board filter if configured (to match Jira board's Sprint Report)
+			if cfg.Stats.SprintBoardFilter != "" {
+				jiraClient.SetSprintBoardFilter(cfg.Stats.SprintBoardFilter)
+				slog.Debug("Sprint board filter configured", "filter", cfg.Stats.SprintBoardFilter)
+			}
+
 			// Fetch all done issues for these sprints
 			sprintIssues, err := jiraClient.FetchIssuesBySprints(sprintIDs)
 			if err != nil {

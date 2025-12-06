@@ -15,8 +15,10 @@ import (
 )
 
 var (
-	configPath string
-	debugMode  bool
+	configPath     string
+	debugMode      bool
+	priorityFilter string
+	statusFilter   string
 )
 
 var checkCmd = &cobra.Command{
@@ -33,6 +35,8 @@ with the most urgent violations displayed first.`,
 func init() {
 	checkCmd.Flags().StringVarP(&configPath, "config", "c", "config.yaml", "Path to configuration file")
 	checkCmd.Flags().BoolVar(&debugMode, "debug", false, "Enable debug logging")
+	checkCmd.Flags().StringVar(&priorityFilter, "priority", "", "Filter by priority (comma-separated, e.g., 'Critical,High')")
+	checkCmd.Flags().StringVar(&statusFilter, "status", "", "Filter by status (comma-separated, e.g., 'Needs Triage,Backlog')")
 	rootCmd.AddCommand(checkCmd)
 }
 
@@ -75,8 +79,23 @@ func runCheck(cmd *cobra.Command, args []string) error {
 	fmt.Println("✓ Authenticated successfully")
 	fmt.Print("\n📥 Fetching bugs...")
 
+	// Parse priority and status filters
+	var priorities, statuses []string
+	if priorityFilter != "" {
+		priorities = strings.Split(priorityFilter, ",")
+		for i := range priorities {
+			priorities[i] = strings.TrimSpace(priorities[i])
+		}
+	}
+	if statusFilter != "" {
+		statuses = strings.Split(statusFilter, ",")
+		for i := range statuses {
+			statuses[i] = strings.TrimSpace(statuses[i])
+		}
+	}
+
 	// Fetch bugs from Jira
-	bugs, err := jiraClient.FetchBugs()
+	bugs, err := jiraClient.FetchBugsWithFilters(priorities, statuses)
 	if err != nil {
 		return fmt.Errorf("failed to fetch bugs: %w", err)
 	}

@@ -53,6 +53,7 @@ type StatsConfig struct {
 	ShowSprints            bool    `koanf:"show_sprints"`
 	SprintNameBeginsWith   string  `koanf:"sprint_name_begins_with"` // Simple prefix filter (e.g., "TOOLS Sprint")
 	SprintNamePattern      string  `koanf:"sprint_name_pattern"`     // Advanced regex pattern (overrides begins_with)
+	SprintBoardFilter      string  `koanf:"sprint_board_filter"`     // JQL filter to match board's filter (e.g., from board settings)
 }
 
 // Load reads configuration from a YAML file and environment variables

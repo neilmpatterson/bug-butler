@@ -16,11 +16,12 @@ import (
 
 // Client wraps the Jira API client
 type Client struct {
-	client         *jira.Client
-	projectKeys    []string
-	baseURL        string
-	additionalJQL  string
-	sprintFieldID  string
+	client             *jira.Client
+	projectKeys        []string
+	baseURL            string
+	additionalJQL      string
+	sprintBoardFilter  string
+	sprintFieldID      string
 	storyPointsFieldID string
 }
 
@@ -51,14 +52,22 @@ func NewClient(cfg config.JiraConfig) (*Client, error) {
 
 	slog.Debug("Successfully authenticated with Jira", "base_url", cfg.BaseURL, "email", cfg.Email)
 
-	return &Client{
+	c := &Client{
 		client:             client,
 		projectKeys:        cfg.ProjectKeys,
 		baseURL:            cfg.BaseURL,
 		additionalJQL:      cfg.AdditionalJQL,
+		sprintBoardFilter:  "", // Will be set by SetSprintBoardFilter if needed
 		sprintFieldID:      cfg.CustomFieldIDs.Sprint,
 		storyPointsFieldID: cfg.CustomFieldIDs.StoryPoints,
-	}, nil
+	}
+
+	return c, nil
+}
+
+// SetSprintBoardFilter sets the board filter for sprint queries
+func (c *Client) SetSprintBoardFilter(filter string) {
+	c.sprintBoardFilter = filter
 }
 
 // searchResponse represents the API v3 search/jql response with cursor pagination
@@ -70,6 +79,11 @@ type searchResponse struct {
 
 // FetchBugs retrieves all unresolved bugs from the configured project(s) using API v3
 func (c *Client) FetchBugs() ([]*domain.Bug, error) {
+	return c.FetchBugsWithFilters(nil, nil)
+}
+
+// FetchBugsWithFilters retrieves unresolved bugs with optional priority and status filters
+func (c *Client) FetchBugsWithFilters(priorities, statuses []string) ([]*domain.Bug, error) {
 	// Build JQL query to fetch unresolved bugs
 	var jql string
 	if len(c.projectKeys) == 1 {
@@ -84,6 +98,30 @@ func (c *Client) FetchBugs() ([]*domain.Bug, error) {
 			projects += fmt.Sprintf("\"%s\"", key)
 		}
 		jql = fmt.Sprintf("project in (%s) AND statusCategory != done AND type = Bug", projects)
+	}
+
+	// Add priority filter if specified
+	if len(priorities) > 0 {
+		priorityList := ""
+		for i, p := range priorities {
+			if i > 0 {
+				priorityList += ", "
+			}
+			priorityList += fmt.Sprintf("\"%s\"", p)
+		}
+		jql += fmt.Sprintf(" AND priority in (%s)", priorityList)
+	}
+
+	// Add status filter if specified
+	if len(statuses) > 0 {
+		statusList := ""
+		for i, s := range statuses {
+			if i > 0 {
+				statusList += ", "
+			}
+			statusList += fmt.Sprintf("\"%s\"", s)
+		}
+		jql += fmt.Sprintf(" AND status in (%s)", statusList)
 	}
 
 	// Append additional JQL filters if configured
@@ -316,6 +354,12 @@ func (c *Client) FetchIssuesBySprints(sprintIDs []string) ([]*domain.Bug, error)
 	// NOTE: We do NOT apply additional_jql here because sprint stats need ALL issues
 	// (bugs + other types), not just filtered bugs. The additional_jql is meant for
 	// bug-specific filtering and would incorrectly exclude Stories/Tasks/etc.
+
+	// However, we DO apply sprint_board_filter if configured to match Jira board filters
+	if c.sprintBoardFilter != "" {
+		jql += " AND (" + c.sprintBoardFilter + ")"
+		slog.Debug("Applying sprint board filter", "filter", c.sprintBoardFilter)
+	}
 
 	jql += " ORDER BY resolutiondate DESC"
 
