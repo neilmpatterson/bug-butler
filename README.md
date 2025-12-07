@@ -238,6 +238,15 @@ bug-butler check -c my-config.yaml
 
 # Enable debug logging
 bug-butler check --debug
+
+# Filter by priority (comma-separated)
+bug-butler check --priority "Critical,High"
+
+# Filter by status (comma-separated)
+bug-butler check --status "Needs Triage,Backlog"
+
+# Combine multiple filters
+bug-butler check --priority "Critical" --status "Needs Triage" --debug
 ```
 
 ### View Bug Trend Statistics
@@ -251,6 +260,13 @@ bug-butler stats --config /path/to/config.yaml
 
 # Enable debug logging
 bug-butler stats --debug
+
+# Interactive mode - prompts for sprint options
+bug-butler stats --interactive
+bug-butler stats -i
+
+# Combine with other flags
+bug-butler stats -i --debug
 ```
 
 The `stats` command displays:
@@ -261,6 +277,44 @@ The `stats` command displays:
 - **Sprint Statistics** (optional): Bug density metrics per sprint including bug counts, percentages, and story points
 
 This helps track whether your team is making progress on reducing the overall bug backlog.
+
+#### Interactive Mode
+
+When using the `--interactive` (or `-i`) flag, the stats command will prompt you for sprint configuration options instead of using the config file. This allows you to:
+
+1. **Choose whether to show sprints** - Get sprint statistics or skip them
+2. **Select filtering method** - Choose from:
+   - Use config file settings (if available)
+   - No filtering - show all sprints
+   - Filter by sprint name prefix (e.g., "TOOLS Sprint")
+   - Filter by sprint name pattern using regex (e.g., "Sprint \\d+")
+3. **Apply board filters** - Optionally add JQL filters to match your Jira board's filter settings
+
+**Example interactive session:**
+```
+bug-butler stats -i
+
+📊 Show sprint statistics? (y/n): y
+
+Select sprint filtering option:
+  1. Use config file settings (prefix: 'TOOLS Sprint')
+  2. No filtering - show all sprints
+  3. Filter by sprint name prefix (e.g., 'TOOLS Sprint')
+  4. Filter by sprint name pattern (regex, e.g., 'Sprint \d+')
+
+Enter choice (1-4): 3
+
+Enter sprint name prefix: Platform Sprint
+
+📋 Apply sprint board JQL filter? (y/n): y
+
+Use config file filter? ('project = PROJ AND type != Epic') (y/n): y
+```
+
+Interactive mode is useful for:
+- Ad-hoc analysis without modifying config files
+- Exploring different sprint filters quickly
+- One-time reports with custom filtering
 
 #### Sprint Statistics
 
